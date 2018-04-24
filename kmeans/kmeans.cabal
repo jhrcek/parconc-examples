@@ -1,0 +1,45 @@
+name: kmeans
+version: 0.1.0.0
+cabal-version: >=1.10
+build-type: Simple
+license: BSD3
+license-file: LICENSE
+maintainer: jhrcek@redhat.com
+author: Jan Hrček
+extra-source-files:
+    ChangeLog.md
+
+executable kmeans
+    main-is: kmeans.hs
+    other-modules: KMeansCore
+    ghc-options: -threaded -rtsopts -O2 -eventlog
+    build-depends:
+        base >=4.10 && <4.11,
+        array >=0.5 && <0.6,
+        binary >=0.8 && <0.9,
+        bytestring >=0.10 && <0.11,
+        deepseq >=1.4 && <1.5,
+        normaldistribution,
+        random,
+        parallel,
+        monad-par,
+        vector,
+        time
+  default-language: Haskell2010
+  other-extensions: DeriveDataTypeable
+
+executable GenSamples
+  main-is: GenSamples.hs
+  other-modules: KMeansCore
+  build-depends:
+      base >=4.10 && <4.11,
+      array >=0.5 && <0.6,
+      binary >=0.8 && <0.9,
+      bytestring >=0.10 && <0.11,
+      deepseq >=1.4 && <1.5,
+      normaldistribution,
+      random,
+      parallel
+
+  default-language: Haskell2010
+  other-extensions: DeriveDataTypeable

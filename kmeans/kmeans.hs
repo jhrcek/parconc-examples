@@ -1,4 +1,7 @@
-{-# LANGUAGE ScopedTypeVariables, BangPatterns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+
 
 -- K-Means sample from "Parallel and Concurrent Programming in Haskell"
 --
@@ -22,37 +25,33 @@
 -- Usage (divide-and-conquer / Eval monad):
 --   $ ./kmeans diveval 7 +RTS -N4
 
-import System.IO
-import KMeansCore
-import Data.Array
-import Data.Array.Unsafe as Unsafe
-import Text.Printf
-import Data.List
-import Data.Function
-import Data.Binary (decodeFile)
-import Debug.Trace
-import Control.Parallel.Strategies as Strategies
+import Control.Concurrent (runInUnboundThread)
+import Control.DeepSeq (rnf)
+import Control.Exception (evaluate)
 import Control.Monad.Par as Par
-import Control.DeepSeq
-import System.Environment
-import Data.Time.Clock
-import Control.Exception
-import Control.Concurrent
-import Control.Monad.ST
-import Data.Array.ST
-import System.Mem
-import Data.Maybe
-
-import qualified Data.Vector as Vector
+import Control.Parallel.Strategies as Strategies
+import Data.Binary (decodeFile)
+import Data.Function (on)
+import Data.List (foldl1', minimumBy)
+import Data.Time.Clock (diffUTCTime, getCurrentTime)
 import Data.Vector (Vector)
+import qualified Data.Vector as Vector
 import qualified Data.Vector.Mutable as MVector
+import KMeansCore
+import System.Environment (getArgs)
+import System.IO (hPutStr, stderr)
+import System.Mem (performGC)
+import Text.Printf (hPrintf, printf)
 
+{-# ANN module "HLint: ignore Use camelCase" #-}
+{-# ANN module "HLint: ignore Eta reduce" #-}
 -- -----------------------------------------------------------------------------
 -- main: read input files, time calculation
 
+main :: IO ()
 main = runInUnboundThread $ do
   points <- decodeFile "points.bin"
-  clusters <- read `fmap` readFile "clusters"
+  clusters <- read <$> readFile "clusters"
   let nclusters = length clusters
   args <- getArgs
   npoints <- evaluate (length points)
@@ -64,9 +63,16 @@ main = runInUnboundThread $ do
     ["par",     n] -> kmeans_par      (read n) nclusters points clusters
     ["divpar",  n] -> kmeans_div_par  (read n) nclusters points clusters npoints
     ["diveval", n] -> kmeans_div_eval (read n) nclusters points clusters npoints
-    _other -> error "args"
+    _other         -> error "args"
   t1 <- getCurrentTime
-  print final_clusters
+
+  putStrLn "----- Initial locations of cluster means"
+  read @[(Int, Double, Double, Double, Double)] <$> readFile "params" >>= mapM_ (\(_npoints, mX, mY, _stdX, _stdY) -> print (mX, mY))
+
+  print "----- Calculated clusters"
+  mapM_ print final_clusters
+
+
   printf "Total time: %.2f\n" (realToFrac (diffUTCTime t1 t0) :: Double)
 
 -- -----------------------------------------------------------------------------
@@ -90,6 +96,7 @@ kmeans_seq nclusters points clusters =
   in
   loop 0 clusters
 
+tooMany :: Int
 tooMany = 80
 -- >>
 
@@ -122,7 +129,7 @@ split :: Int -> [a] -> [[a]]
 split numChunks xs = chunk (length xs `quot` numChunks) xs
 
 chunk :: Int -> [a] -> [[a]]
-chunk n [] = []
+chunk _ [] = []
 chunk n xs = as : chunk n bs
   where (as,bs) = splitAt n xs
 -- >>
@@ -214,8 +221,8 @@ kmeans_div_eval threshold nclusters points clusters npoints =
              divconq (Node left right) = runEval $ do
                   c1 <- rpar $ divconq left
                   c2 <- rpar $ divconq right
-                  rdeepseq c1
-                  rdeepseq c2
+                  _ <- rdeepseq c1
+                  _ <- rdeepseq c2
                   return $! combine c1 c2
 
              clusters' = makeNewClusters $ divconq tree
@@ -255,7 +262,7 @@ assign nclusters clusters points = Vector.create $ do
 data PointSum = PointSum {-# UNPACK #-} !Int {-# UNPACK #-} !Double {-# UNPACK #-} !Double
 
 instance NFData PointSum where
-  rnf (PointSum count xs ys) = () -- all fields are strict
+  rnf (PointSum _count _xs _ys) = () -- all fields are strict
 
 -- <<addToPointSum
 addToPointSum :: PointSum -> Point -> PointSum
@@ -286,7 +293,7 @@ combine = Vector.zipWith addPointSums
 parSteps_strat :: Int -> [Cluster] -> [[Point]] -> [Cluster]
 parSteps_strat nclusters clusters pointss
   = makeNewClusters $
-      foldr1 combine $
+      foldr1 combine
           (map (assign nclusters clusters) pointss
             `using` parList rseq)
 -- >>
@@ -294,7 +301,7 @@ parSteps_strat nclusters clusters pointss
 steps_par :: Int -> [Cluster] -> [[Point]] -> [Cluster]
 steps_par nclusters clusters pointss
   = makeNewClusters $
-      foldl1' combine $
+      foldl1' combine
           (runPar $ Par.parMap (assign nclusters clusters) pointss)
 
 -- <<makeNewClusters

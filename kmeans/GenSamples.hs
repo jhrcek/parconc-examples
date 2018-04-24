@@ -1,12 +1,12 @@
+import Control.Monad (replicateM)
+import Data.Array (accumArray, assocs)
+import Data.Binary (encodeFile)
+import Data.List (zip5)
+import Data.Random.Normal (normals')
 import KMeansCore
-import Data.Random.Normal
-import System.Random
-import System.IO
-import Data.Array
-import System.Environment
-import Control.Monad
-import Data.List
-import Data.Binary
+import System.Environment (getArgs)
+import System.IO (Handle, IOMode (WriteMode), hClose, hPutChar, hPutStr, openFile)
+import System.Random (mkStdGen, newStdGen, randomRIO, randomRs, setStdGen, split)
 
 minX, maxX, minY, maxY, minSD, maxSD :: Double
 minX = -10
@@ -22,8 +22,8 @@ main = do
 
     case rest of
         [seed] -> setStdGen (mkStdGen seed)
-        _ -> return ()
-
+        _      -> return ()
+    -- number of points
     nps <- replicateM n (randomRIO (minp, maxp))
     xs  <- replicateM n (randomRIO (minX, maxX))
     ys  <- replicateM n (randomRIO (minY, maxY))
